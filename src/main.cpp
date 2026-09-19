@@ -22,10 +22,18 @@
 #include "TouchHandler.h"
 #include "ActionMapper.h"
 
+#if ENABLE_DEBUG_CONSOLE
+#include "DebugConsole.h"
+#endif
+
 static BleHandler   bleHandler;
 static MpuHandler    mpuHandler;
 static TouchHandler  touchHandler;
 static ActionMapper  actionMapper;
+
+#if ENABLE_DEBUG_CONSOLE
+static DebugConsole debugConsole; // opsional: uji gesture lewat Serial tanpa sensor fisik
+#endif
 
 // Heartbeat status koneksi (non-blocking, hanya untuk keperluan debug Serial).
 static unsigned long lastStatusPrint = 0;
@@ -47,11 +55,21 @@ void setup() {
     touchHandler.begin();
     actionMapper.begin(&bleHandler, &mpuHandler);
 
+#if ENABLE_DEBUG_CONSOLE
+    debugConsole.begin(&actionMapper, &bleHandler);
+#endif
+
     Serial.println(F("Siap. Mode aktif: MODE 1 (Navigasi Kursor)"));
     Serial.println(F("Menunggu koneksi BLE ke Windows/Android sebagai 'Air Mouse'..."));
 }
 
 void loop() {
+#if ENABLE_DEBUG_CONSOLE
+    // 0) Mode test manual lewat Serial (aktif/nonaktif via ENABLE_DEBUG_CONSOLE
+    //    di Config.h) - berguna saat MPU9250/sensor sentuh belum terpasang.
+    debugConsole.update();
+#endif
+
     // ------------------------------------------------------------------
     // 1) Prioritaskan semua gesture tombol yang tertunda. Satu iterasi
     //    loop() bisa saja menghasilkan lebih dari satu event (mis. sebuah

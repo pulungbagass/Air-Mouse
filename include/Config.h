@@ -65,3 +65,17 @@
 // RECENTER_DURATION_MS : lama sampling non-blocking saat fitur re-center /
 //                         kalibrasi ulang titik nol MPU9250 dijalankan.
 #define RECENTER_DURATION_MS  400UL
+
+// ============================================================================
+// MODE TEST TANPA HARDWARE SENSOR (opsional)
+// ----------------------------------------------------------------------------
+// Jika modul MPU9250 dan/atau sensor sentuh belum terpasang, aktifkan baris
+// di bawah ini (isi 1) untuk memicu gesture secara MANUAL lewat Serial
+// Monitor tanpa menyentuh apa pun secara fisik - sangat berguna untuk
+// menguji koneksi & output BLE (Mouse/Keyboard/Media Keys) lebih dulu
+// sambil menunggu modul lain datang. Ketik 'h' di Serial Monitor untuk
+// menampilkan daftar perintahnya. Set ke 0 setelah semua sensor terpasang
+// (opsional - membiarkannya tetap 1 juga tidak masalah, hanya menambah
+// sedikit ukuran flash & tidak aktif kecuali ada input Serial).
+// ============================================================================
+#define ENABLE_DEBUG_CONSOLE 1

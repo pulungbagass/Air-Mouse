@@ -14,8 +14,6 @@
  */
 #pragma once
 #include <Arduino.h>
-#include <BleKeyboard.h>
-#include <BleMouse.h>
 
 class BleHandler {
 public:

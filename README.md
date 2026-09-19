@@ -70,7 +70,41 @@ bersangkutan terbaca **LOW** — inilah yang dibaca `TouchHandler` sebagai
 > Jika board Anda gagal ter-flash, tahan tombol **BOOT** saat proses upload
 > dimulai (khas sebagian board "Super Mini" varian tertentu).
 
-## 4. Tuning
+## 4. Testing Tanpa Modul MPU9250 / Sensor Sentuh
+
+Firmware ini aman di-upload dan dijalankan **hanya dengan board ESP32-S3
+telanjang** (tanpa MPU9250, tanpa sensor sentuh sama sekali):
+
+- `MpuHandler::begin()` akan gagal dengan sopan (`ready = false`) jika
+  MPU9250 tidak terdeteksi di I2C - tidak crash, hanya mencetak peringatan
+  ke Serial dan tidak pernah mengirim pergerakan kursor.
+- Empat pin sensor jari (`INPUT_PULLUP`) akan tetap terbaca stabil HIGH
+  ("tidak ditekan") meskipun belum disambung ke apa pun, sehingga tidak ada
+  tap/gesture palsu yang muncul sendiri.
+
+Selagi menunggu modul lain datang, aktifkan **Mode Test Serial** (`include/Config.h`
+-> `ENABLE_DEBUG_CONSOLE`, sudah `1` secara default) untuk memicu SEMUA
+gesture secara manual lewat Serial Monitor - persis melalui jalur kode yang
+sama dengan sentuhan jari sungguhan (termasuk logika Mode 1/Mode 2,
+drag-lock, toggle mode, dll):
+
+1. Upload firmware, buka Serial Monitor (115200 baud) - menu bantuan akan
+   otomatis tercetak saat boot.
+2. Pasangkan (pairing) HP/PC ke Bluetooth **"Air Mouse"**.
+3. Ketik satu karakter di Serial Monitor lalu Enter, misalnya:
+   - `1` -> Single Tap Telunjuk (klik kiri)
+   - `z` -> Combo Telunjuk+Tengah (Ctrl+C)
+   - `m` -> Combo 4 jari (Win+L)
+   - `i` / `k` / `j` / `l` -> gerakkan kursor manual atas/bawah/kiri/kanan
+     (mem-bypass MPU9250 sepenuhnya, cocok untuk uji output Mouse saja)
+   - `d` -> simulasi hold Manis 3 detik -> toggle ke Mode 2
+   - `h` -> tampilkan menu bantuan lagi
+4. Setelah semua modul fisik terpasang dan sudah teruji, ubah
+   `ENABLE_DEBUG_CONSOLE` menjadi `0` di `Config.h` jika ingin
+   menonaktifkannya (opsional, membiarkannya `1` juga tidak mengganggu
+   operasi normal).
+
+## 5. Tuning
 
 Semua parameter berikut ada di `include/Config.h`:
 
@@ -86,7 +120,7 @@ Semua parameter berikut ada di `include/Config.h`:
 | `MAX_MOUSE_DELTA`        | 30      | Batas lonjakan kursor per update                       |
 | `RECENTER_DURATION_MS`   | 400     | Lama sampling saat re-kalibrasi titik nol (non-blocking)|
 
-## 5. Referensi Lengkap Shortcut
+## 6. Referensi Lengkap Shortcut
 
 ### MODE 1 — Navigasi Kursor Utama (default saat boot)
 
@@ -124,15 +158,27 @@ Kombinasi jari (tap bersamaan, Mode 2):
 | Telunjuk + Manis         | Volume Down                   |
 | Tengah + Kelingking      | Alt + F4 (Tutup Window)        |
 
-## 6. Catatan Desain & Asumsi
+## 7. Catatan Desain & Asumsi
 
 - **Library BLE**: menggunakan fork `Georgegipa/ESP32-BLE-Combo` yang
   membuat SATU perangkat BLE HID gabungan Mouse+Keyboard+Media Keys.
-  Menggunakan library `BLE-Mouse` dan `BLE-Keyboard` T-vK secara terpisah
-  **tidak bisa** dipakai bersamaan karena masing-masing membuat server BLE
-  HID sendiri dan akan bentrok saat pairing.
-- **Mode NimBLE** diaktifkan (`USE_NIMBLE`) untuk menghemat RAM/Flash,
-  penting karena ESP32-S3 Super Mini umumnya hanya memiliki Flash 4MB.
+- **Penyebab error `redefinition` yang penting**: `BleKeyboard.h` dan
+  `BleMouse.h` dari fork tersebut tidak memakai include guard yang aman untuk
+  pemakaian berulang. Karena `ActionMapper.cpp` sebelumnya meng-include kedua
+  header itu lagi setelah `ActionMapper.h` sudah membawa `BleHandler.h`, class
+  `Keyboard_` dan konstanta `KEY_*` dideklarasikan dua kali dalam translation
+  unit yang sama. Sekarang `BleHandler.h` tidak lagi membawa header library BLE;
+  `BleKeyboard.h` dan `BleMouse.h` hanya di-include langsung pada file `.cpp`
+  yang benar-benar membutuhkannya. Dengan begitu setiap translation unit hanya
+  memproses masing-masing header BLE satu kali.
+- **Platform Arduino dipin ke `espressif32@6.8.1` (Arduino-ESP32 2.0.17)**.
+  Ini menjaga kompatibilitas dengan struktur BLE/HID yang dipakai fork Combo
+  tanpa perlu memodifikasi library pihak ketiga. PlatformIO 6.8.1 memang
+  menggunakan Arduino-ESP32 2.0.17.
+- **Mode NimBLE** tetap diaktifkan (`USE_NIMBLE`) untuk menghemat RAM/Flash.
+- **Native USB CDC** menggunakan `ARDUINO_USB_MODE=0` +
+  `ARDUINO_USB_CDC_ON_BOOT=1`. Mode USB `1` adalah mode OTG/host, bukan mode
+  device CDC yang dibutuhkan Serial Monitor melalui USB-C.
 - **Toggle Virtual Keyboard** (double click Tengah, Mode 1) memakai
   shortcut asli Windows 10/11 `Win+Ctrl+O`. Di Android, shortcut ini tidak
   berlaku universal — silakan sesuaikan di `ActionMapper::handleMode1DoubleTap`

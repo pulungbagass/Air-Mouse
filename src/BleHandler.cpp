@@ -1,5 +1,7 @@
 #include "BleHandler.h"
 #include "Config.h"
+#include <BleKeyboard.h>
+#include <BleMouse.h>
 
 // Catatan: library "ESP32-BLE-Combo" menyediakan objek global siap pakai
 // `Keyboard`, `Mouse`, dan `bleDevice` (dideklarasikan `extern` di header,
@@ -8,7 +10,8 @@
 
 void BleHandler::begin() {
     // Nama BLE harus di-set SEBELUM Keyboard.begin() dipanggil.
-    bleDevice.setDeviceName(BLE_DEVICE_NAME);
+    // Pada ESP32-BLE-Combo, properti nama disimpan pada field `deviceName`.
+    bleDevice.setName(BLE_DEVICE_NAME);
 
     // Keyboard.begin() menginisialisasi SATU perangkat BLE HID gabungan yang
     // sekaligus melayani laporan (report) Mouse dan Media Keys - sesuai
