@@ -1,81 +1,98 @@
-/**
- * Config.h
- * ----------------------------------------------------------------------
- * Pusat konfigurasi perangkat keras & parameter waktu "Air Mouse".
- * Semua nilai yang mungkin perlu di-tuning (sensitivitas, timing, pin)
- * SENGAJA dikumpulkan di satu file ini agar mudah di-maintain tanpa perlu
- * menyentuh logika di file .cpp manapun.
- * ----------------------------------------------------------------------
- */
 #pragma once
 
-// ============================================================================
-// IDENTITAS PERANGKAT BLE
-// ============================================================================
-#define BLE_DEVICE_NAME "Air Mouse"
+#define BLE_DEVICE_NAME              "Air Mouse"
+#define BLE_MANUFACTURER_NAME        "AirMouse"
+#define BLE_APPEARANCE_MOUSE         0x03C2
+#define BLE_PNP_VENDOR_ID_SOURCE     0x02
+#define BLE_PNP_VENDOR_ID            0x303A
+#define BLE_PNP_PRODUCT_ID           0x8001
+#define BLE_PNP_VERSION              0x0100
+#define BLE_PROFILE_REVISION         2
+#define BLE_CONN_INTERVAL_MIN        6      // 1.25 ms
+#define BLE_CONN_INTERVAL_MAX        12     // 1.25 ms
+#define BLE_CONN_LATENCY             0
+#define BLE_CONN_TIMEOUT             400    // 10 ms
+#define BLE_ADV_INTERVAL_MIN         32     // 0.625 ms
+#define BLE_ADV_INTERVAL_MAX         48     // 0.625 ms
+#define BLE_KEY_REPORT_GAP_MS        8
+#define BLE_CLICK_GAP_MS             12
+#define BLE_MOUSE_SPLIT_GAP_MS       1
 
-// ============================================================================
-// PIN MAPPING - SENSOR GERAK (MPU9250 via I2C)
-// ============================================================================
-#define PIN_MPU_SDA      8
-#define PIN_MPU_SCL      9
-#define MPU_I2C_ADDRESS  0x68   // alamat default saat pin AD0 MPU9250 = GND
+#define PIN_MPU_SDA                  8
+#define PIN_MPU_SCL                  9
+#define MPU_ADDR_PRIMARY             0x68
+#define MPU_ADDR_SECONDARY           0x69
+#define I2C_CLOCK_SAFE_HZ            100000
+#define I2C_CLOCK_FAST_HZ            400000
+#define I2C_TIMEOUT_MS               20
+#define I2C_POWER_SETTLE_MS          150
+#define MPU_RETRY_INTERVAL_MS        2000
+#define MPU_READ_FAIL_LIMIT          12
+#define MPU_STALE_SAMPLE_LIMIT       150
+#define MPU_ACCEPT_UNKNOWN_WHOAMI    1
 
-// ============================================================================
-// PIN MAPPING - SENSOR SENTUH JARI ("Ground Switch")
-// ----------------------------------------------------------------------------
-// Pelat tembaga di JEMPOL disambung permanen ke GND (bukan ke GPIO).
-// Pin di bawah ini WAJIB mode INPUT_PULLUP: saat idle pin akan HIGH, dan
-// begitu jari (yang sedang menyentuh pelat jempol/GND) menyentuh pelat pada
-// jari lain, rangkaian tertutup melalui tubuh pengguna sehingga pin tersebut
-// terbaca LOW. Jadi: LOW = jari sedang menyentuh / ditekan.
-// ============================================================================
-#define PIN_FINGER_INDEX   1   // Telunjuk
-#define PIN_FINGER_MIDDLE  2   // Tengah
-#define PIN_FINGER_RING    3   // Manis
-#define PIN_FINGER_PINKY   4   // Kelingking
+#define PIN_FINGER_INDEX             1
+#define PIN_FINGER_MIDDLE            2
+#define PIN_FINGER_RING              3
+#define PIN_FINGER_PINKY             4
 
-// ============================================================================
-// PARAMETER WAKTU (semua berbasis millis(), TIDAK ADA delay() yang memblokir)
-// ============================================================================
-#define DEBOUNCE_MS          40UL   // 30 - 50 ms
-#define CHORD_WINDOW_MS       80UL  // 50 - 100 ms, toleransi tap bersamaan (combo)
-#define DOUBLE_CLICK_MS      300UL  // jendela deteksi double click
-#define HOLD_DURATION_MS    3000UL  // >= 3000 ms untuk aksi "hold"
-#define HOLD_REPEAT_MS       400UL  // interval pengulangan aksi hold kontinu
-                                     // (dipakai misalnya oleh Fast Forward/Rewind)
+#define DEBOUNCE_MS                  40UL
+#define CHORD_WINDOW_MS              80UL
+#define DOUBLE_CLICK_MS              300UL
+#define HOLD_DURATION_MS             3000UL
+#define HOLD_REPEAT_MS               400UL
 
-// ============================================================================
-// PARAMETER GERAKAN KURSOR (MPU9250)
-// ============================================================================
-// MOUSE_SENSITIVITY : pengali dari (derajat/detik) gyro -> piksel pergerakan.
-//                      Naikkan nilai ini jika kursor terasa terlalu lambat,
-//                      turunkan jika terlalu liar/cepat.
-#define MOUSE_SENSITIVITY     14.0f
+#define AXIS_PLUS_X                  0
+#define AXIS_MINUS_X                 1
+#define AXIS_PLUS_Y                  2
+#define AXIS_MINUS_Y                 3
+#define AXIS_PLUS_Z                  4
+#define AXIS_MINUS_Z                 5
 
-// GYRO_DEADZONE_DPS : ambang batas noise; gerakan gyro di bawah nilai ini
-//                      (derajat/detik) akan diabaikan agar kursor tidak
-//                      "gemetar" saat tangan diam.
-#define GYRO_DEADZONE_DPS      1.2f
+#define MPU_AXIS_FORWARD             AXIS_PLUS_X
+#define MPU_AXIS_UP                  AXIS_PLUS_Z
 
-// MAX_MOUSE_DELTA   : batas maksimum perpindahan piksel per satu update,
-//                      mencegah lonjakan kursor akibat gerakan tersentak.
-#define MAX_MOUSE_DELTA          30
+#define CURSOR_INVERT_X              0
+#define CURSOR_INVERT_Y              0
+#define MOUSE_SENSITIVITY            24.0f  // px per degree
+#define MOUSE_Y_RATIO                1.0f
+#define GYRO_DEADZONE_DPS            1.5f
+#define CURSOR_ACCEL_START_DPS       30.0f
+#define CURSOR_ACCEL_FULL_DPS        200.0f
+#define CURSOR_ACCEL_MAX_GAIN        1.8f
+#define CURSOR_SMOOTH_TAU_SLOW_MS    40.0f
+#define CURSOR_SMOOTH_TAU_FAST_MS    4.0f
+#define CURSOR_SMOOTH_LOW_DPS        8.0f
+#define CURSOR_SMOOTH_HIGH_DPS       100.0f
+#define CURSOR_MAX_SPEED_PX_S        7000.0f
+#define CURSOR_REPORT_INTERVAL_MS    8
 
-// RECENTER_DURATION_MS : lama sampling non-blocking saat fitur re-center /
-//                         kalibrasi ulang titik nol MPU9250 dijalankan.
-#define RECENTER_DURATION_MS  400UL
+#define TILT_ACCEL_TAU_S             0.30f
+#define TILT_ACCEL_MIN_G             0.85f
+#define TILT_ACCEL_MAX_G             1.15f
+#define POINT_WORLD_BLEND_FULL       0.50f
+#define POINT_WORLD_BLEND_ZERO       0.20f
 
-// ============================================================================
-// MODE TEST TANPA HARDWARE SENSOR (opsional)
-// ----------------------------------------------------------------------------
-// Jika modul MPU9250 dan/atau sensor sentuh belum terpasang, aktifkan baris
-// di bawah ini (isi 1) untuk memicu gesture secara MANUAL lewat Serial
-// Monitor tanpa menyentuh apa pun secara fisik - sangat berguna untuk
-// menguji koneksi & output BLE (Mouse/Keyboard/Media Keys) lebih dulu
-// sambil menunggu modul lain datang. Ketik 'h' di Serial Monitor untuk
-// menampilkan daftar perintahnya. Set ke 0 setelah semua sensor terpasang
-// (opsional - membiarkannya tetap 1 juga tidak masalah, hanya menambah
-// sedikit ukuran flash & tidak aktif kecuali ada input Serial).
-// ============================================================================
-#define ENABLE_DEBUG_CONSOLE 1
+#define GYRO_CALIB_DURATION_MS       1200UL
+#define GYRO_CALIB_MAX_STD_DPS       1.5f
+#define GYRO_CALIB_MAX_ATTEMPTS      5
+#define RECENTER_DURATION_MS         600UL
+#define GYRO_STATIONARY_ENTER_DPS    1.6f
+#define GYRO_STATIONARY_EXIT_DPS     3.0f
+#define GYRO_STATIONARY_HOLD_MS      300
+#define GYRO_BIAS_TRACK_TAU_S        1.5f
+#define TOUCH_MOTION_FREEZE_MS       150UL
+
+#define ENABLE_DEBUG_CONSOLE         1
+#define STATUS_HEARTBEAT_MS          5000UL
+#define TELEMETRY_INTERVAL_MS        100UL
+
+#define TASK_CORE_BLE                0
+#define TASK_CORE_SENSOR             1
+#define TASK_PRIORITY_BLE            2
+#define TASK_PRIORITY_SENSOR         2
+#define TASK_STACK_SIZE_BLE          6144
+#define TASK_STACK_SIZE_SENSOR       6144
+#define BLE_COMMAND_QUEUE_LENGTH     64
+#define BLE_TASK_QUEUE_WAIT_MS       20UL
+#define SENSOR_TASK_LOOP_DELAY_MS    4UL

@@ -1,18 +1,3 @@
-/**
- * ActionMapper.h
- * ----------------------------------------------------------------------
- * Lapisan "business logic": menerjemahkan GestureEvent murni dari
- * TouchHandler menjadi aksi BLE nyata lewat BleHandler, sesuai tabel
- * shortcut Mode 1 (Navigasi) & Mode 2 (Media/Produktivitas), termasuk:
- *   - toggle mode (hold Manis 3 detik)
- *   - drag & drop lock (hold Telunjuk di Mode 1)
- *   - pause/resume sensor gerak (hold Kelingking di Mode 1)
- *   - re-center MPU9250 (hold Tengah di Mode 1)
- *
- * Modul ini TIDAK melakukan I/O langsung ke pin atau ke BLE stack - ia
- * hanya mengorkestrasi pemanggilan BleHandler & MpuHandler.
- * ----------------------------------------------------------------------
- */
 #pragma once
 #include <Arduino.h>
 #include "AppState.h"

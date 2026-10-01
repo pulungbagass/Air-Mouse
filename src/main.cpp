@@ -1,21 +1,6 @@
-/**
- * main.cpp - Air Mouse ESP32-S3 Super Mini
- * ----------------------------------------------------------------------
- * Tanggung jawab file ini HANYA:
- *   1. Inisialisasi semua modul (BLE, MPU9250, Touch, ActionMapper).
- *   2. Menjalankan main loop non-blocking yang:
- *        a. Mengalirkan (drain) semua GestureEvent yang tertunda ke
- *           ActionMapper terlebih dahulu, agar respons tombol tidak pernah
- *           tertunda oleh pemrosesan IMU.
- *        b. Membaca MPU9250 dan mengirim pergerakan kursor - HANYA saat
- *           Mode 1 aktif dan sensor tidak sedang dijeda, sesuai spesifikasi.
- *
- * TIDAK ADA logika bisnis (pemetaan gesture->aksi) atau akses register
- * sensor/BLE langsung di file ini - semua didelegasikan ke modul terkait.
- * ----------------------------------------------------------------------
- */
 #include <Arduino.h>
 #include "Config.h"
+#include "RtosUtil.h"
 #include "AppState.h"
 #include "BleHandler.h"
 #include "MpuHandler.h"
@@ -27,90 +12,107 @@
 #endif
 
 static BleHandler   bleHandler;
-static MpuHandler    mpuHandler;
-static TouchHandler  touchHandler;
-static ActionMapper  actionMapper;
+static MpuHandler   mpuHandler;
+static TouchHandler touchHandler;
+static ActionMapper actionMapper;
 
 #if ENABLE_DEBUG_CONSOLE
-static DebugConsole debugConsole; // opsional: uji gesture lewat Serial tanpa sensor fisik
+static DebugConsole debugConsole;
 #endif
 
-// Heartbeat status koneksi (non-blocking, hanya untuk keperluan debug Serial).
-static unsigned long lastStatusPrint = 0;
-static const unsigned long STATUS_INTERVAL_MS = 5000UL;
+static TaskHandle_t sensorTaskHandle = nullptr;
 
-void setup() {
-    Serial.begin(115200);
-    // Penantian singkat SEKALI di setup() agar port USB-CDC sempat
-    // ter-enumerasi sebelum log pertama dicetak. Ini terjadi sebelum
-    // loop() non-blocking berjalan, sehingga tidak melanggar aturan
-    // "tanpa delay() yang memblokir pergerakan kursor".
-    delay(200);
+static const char *mpuStateLabel(MpuState state) {
+    switch (state) {
+        case MpuState::SEARCHING:   return "mencari";
+        case MpuState::CALIBRATING: return "kalibrasi";
+        case MpuState::RUNNING:     return "aktif";
+    }
+    return "?";
+}
 
-    Serial.println();
-    Serial.println(F("=== Air Mouse (ESP32-S3 Super Mini) - booting ==="));
+static void sensorTaskEntry(void *pvParameters) {
+    (void)pvParameters;
 
-    bleHandler.begin();
-    mpuHandler.begin();
     touchHandler.begin();
+    mpuHandler.begin();
     actionMapper.begin(&bleHandler, &mpuHandler);
 
 #if ENABLE_DEBUG_CONSOLE
-    debugConsole.begin(&actionMapper, &bleHandler);
+    debugConsole.begin(&actionMapper, &bleHandler, &mpuHandler);
 #endif
 
-    Serial.println(F("Siap. Mode aktif: MODE 1 (Navigasi Kursor)"));
-    Serial.println(F("Menunggu koneksi BLE ke Windows/Android sebagai 'Air Mouse'..."));
-}
+    Serial.println(F("[SensorTask] Aktif di Core 1. Mode awal: MODE 1 (Navigasi Kursor)"));
 
-void loop() {
+    unsigned long lastStatusPrint = millis();
+    unsigned long motionFreezeUntil = 0;
+
+    for (;;) {
 #if ENABLE_DEBUG_CONSOLE
-    // 0) Mode test manual lewat Serial (aktif/nonaktif via ENABLE_DEBUG_CONSOLE
-    //    di Config.h) - berguna saat MPU9250/sensor sentuh belum terpasang.
-    debugConsole.update();
+        debugConsole.update();
 #endif
 
-    // ------------------------------------------------------------------
-    // 1) Prioritaskan semua gesture tombol yang tertunda. Satu iterasi
-    //    loop() bisa saja menghasilkan lebih dari satu event (mis. sebuah
-    //    SINGLE_TAP yang baru saja "expired" bersamaan dengan HOLD_REPEAT
-    //    jari lain) - karena itu di-drain dengan while, bukan if.
-    // ------------------------------------------------------------------
-    GestureEvent evt;
-    while (touchHandler.update(evt)) {
-        actionMapper.handleGesture(evt);
-    }
+        GestureEvent evt;
+        while (touchHandler.update(evt)) {
+            actionMapper.handleGesture(evt);
+        }
 
-    // ------------------------------------------------------------------
-    // 2) Streaming koordinat gerak - HANYA aktif di Mode 1 dan saat sensor
-    //    tidak dijeda. Di Mode 2, pembacaan MPU9250 dimatikan sepenuhnya
-    //    (tidak dipanggil sama sekali) sesuai spesifikasi.
-    // ------------------------------------------------------------------
-    if (actionMapper.getMode() == OperationMode::MODE_1_NAVIGATION &&
-        !actionMapper.isMotionPaused()) {
+        const unsigned long now = millis();
+        const unsigned long touchStamp = touchHandler.lastRawChangeTime();
+        if (touchStamp != 0) {
+            const unsigned long until = touchStamp + TOUCH_MOTION_FREEZE_MS;
+            if ((long)(until - motionFreezeUntil) > 0) motionFreezeUntil = until;
+        }
+        const bool frozen = (long)(motionFreezeUntil - now) > 0;
 
-        MouseDelta delta;
-        if (mpuHandler.update(delta)) {
-            if (delta.dx != 0 || delta.dy != 0) {
+        if (actionMapper.getMode() == OperationMode::MODE_1_NAVIGATION &&
+            !actionMapper.isMotionPaused()) {
+            MouseDelta delta;
+            if (mpuHandler.update(delta, frozen)) {
                 bleHandler.moveMouse(delta.dx, delta.dy);
             }
         }
-    }
 
-    // ------------------------------------------------------------------
-    // (Opsional) Heartbeat status koneksi setiap 5 detik, murni untuk debug.
-    // ------------------------------------------------------------------
-    unsigned long now = millis();
-    if (now - lastStatusPrint >= STATUS_INTERVAL_MS) {
-        lastStatusPrint = now;
-        Serial.print(F("[Status] BLE: "));
-        Serial.print(bleHandler.isConnected() ? F("Connected") : F("Advertising..."));
-        Serial.print(F(" | Mode: "));
-        Serial.print(actionMapper.getMode() == OperationMode::MODE_1_NAVIGATION ? "1" : "2");
-        Serial.print(F(" | Sensor: "));
-        Serial.println(actionMapper.isMotionPaused() ? F("Paused") : F("Active"));
-    }
+        if (now - lastStatusPrint >= STATUS_HEARTBEAT_MS) {
+            lastStatusPrint = now;
+            Serial.print(F("[Status] BLE: "));
+            Serial.print(bleHandler.isConnected() ? F("Connected") : F("Advertising..."));
+            Serial.print(F(" | Mode: "));
+            Serial.print(actionMapper.getMode() == OperationMode::MODE_1_NAVIGATION ? "1" : "2");
+            Serial.print(F(" | Sensor gerak: "));
+            Serial.print(actionMapper.isMotionPaused() ? F("dijeda") : F("on"));
+            Serial.print(F(" | MPU: "));
+            Serial.print(mpuStateLabel(mpuHandler.state()));
+            Serial.print(F(" | BLE cmd dropped: "));
+            Serial.println(bleHandler.getDroppedCommandCount());
+        }
 
-    // Tidak ada delay() di sini - seluruh timing (debounce, hold, chord,
-    // double-click, sampling IMU) sepenuhnya berbasis millis() non-blocking.
+        vTaskDelay(msToTicks(SENSOR_TASK_LOOP_DELAY_MS));
+    }
+}
+
+void setup() {
+    Serial.begin(115200);
+    Serial.setTxTimeoutMs(0);
+    delay(200);
+
+    Serial.println();
+    Serial.println(F("=== Air Mouse (ESP32-S3 Super Mini) - Dual-Core FreeRTOS ==="));
+
+    bleHandler.begin();
+
+    xTaskCreatePinnedToCore(
+        sensorTaskEntry,
+        "Sensor_Core1_Task",
+        TASK_STACK_SIZE_SENSOR,
+        nullptr,
+        TASK_PRIORITY_SENSOR,
+        &sensorTaskHandle,
+        TASK_CORE_SENSOR);
+
+    Serial.println(F("[Main] Task Core 0 (BLE) & Task Core 1 (Sensor) telah dibuat."));
+}
+
+void loop() {
+    vTaskDelay(msToTicks(1000));
 }

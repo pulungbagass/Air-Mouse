@@ -1,6 +1,5 @@
 #include "ActionMapper.h"
-#include <BleKeyboard.h>
-#include <BleMouse.h>
+#include "HidKeys.h"
 
 void ActionMapper::begin(BleHandler *bleRef, MpuHandler *mpuRef) {
     ble = bleRef;
@@ -16,7 +15,7 @@ void ActionMapper::toggleMode() {
         Serial.println(F("[Mode] -> MODE 2 (Media & Produktivitas)"));
     } else {
         currentMode = OperationMode::MODE_1_NAVIGATION;
-        if (mpu) mpu->resetTimer(); // cegah lonjakan dt setelah sensor gerak aktif lagi
+        if (mpu) mpu->resetTimer();
         Serial.println(F("[Mode] -> MODE 1 (Navigasi Kursor)"));
     }
 }
@@ -31,9 +30,6 @@ void ActionMapper::handleGesture(const GestureEvent &event) {
     }
 }
 
-// ============================================================================
-// MODE 1 - NAVIGASI KURSOR UTAMA
-// ============================================================================
 void ActionMapper::handleMode1(const GestureEvent &event) {
     switch (event.type) {
         case GestureType::SINGLE_TAP:   handleMode1SingleTap(event.fingerMask); break;
@@ -49,7 +45,7 @@ void ActionMapper::handleMode1SingleTap(uint8_t mask) {
     switch (mask) {
         case FingerMask::INDEX:
             if (dragLockActive) {
-                // Tap ke-2 setelah hold Telunjuk -> lepaskan Drag & Drop Lock.
+
                 ble->mouseRelease(MOUSE_LEFT);
                 dragLockActive = false;
                 Serial.println(F("[Mode1] Drag lock DILEPAS"));
@@ -63,11 +59,11 @@ void ActionMapper::handleMode1SingleTap(uint8_t mask) {
             break;
 
         case FingerMask::RING:
-            ble->mouseScroll(1);   // Scroll Up
+            ble->mouseScroll(1);
             break;
 
         case FingerMask::PINKY:
-            ble->mouseScroll(-1);  // Scroll Down
+            ble->mouseScroll(-1);
             break;
 
         default: break;
@@ -77,14 +73,12 @@ void ActionMapper::handleMode1SingleTap(uint8_t mask) {
 void ActionMapper::handleMode1DoubleTap(uint8_t mask) {
     switch (mask) {
         case FingerMask::INDEX:
-            // Buka Folder/Fungsi OS Default -> Enter (aksi "open" standar di
-            // File Explorer Windows maupun pengelola berkas Android).
+
             ble->tapKey(KEY_RETURN);
             break;
 
         case FingerMask::MIDDLE:
-            // Buka/Tutup Virtual Keyboard -> shortcut bawaan Windows 10/11
-            // untuk toggle Touch Keyboard: Win + Ctrl + O.
+
             ble->pressKey(KEY_LEFT_GUI);
             ble->pressKey(KEY_LEFT_CTRL);
             ble->tapKey('o');
@@ -109,8 +103,7 @@ void ActionMapper::handleMode1Hold(const GestureEvent &event) {
 
     switch (event.fingerMask) {
         case FingerMask::INDEX:
-            // Drag & Drop Lock: tahan klik kiri hingga tap 1x lagi (ditangani
-            // di handleMode1SingleTap) untuk melepas.
+
             if (isFirst && !dragLockActive) {
                 ble->mousePress(MOUSE_LEFT);
                 dragLockActive = true;
@@ -119,7 +112,7 @@ void ActionMapper::handleMode1Hold(const GestureEvent &event) {
             break;
 
         case FingerMask::MIDDLE:
-            // Re-center / kalibrasi nol MPU9250 (non-blocking, lihat MpuHandler).
+
             if (isFirst && mpu) {
                 mpu->startRecenter();
                 Serial.println(F("[Mode1] Re-center MPU9250..."));
@@ -127,12 +120,12 @@ void ActionMapper::handleMode1Hold(const GestureEvent &event) {
             break;
 
         case FingerMask::RING:
-            // TOGGLE KE MODE 2
+
             if (isFirst) toggleMode();
             break;
 
         case FingerMask::PINKY:
-            // Pause/Sleep sensor gerak
+
             if (isFirst) {
                 motionPaused = !motionPaused;
                 if (!motionPaused && mpu) mpu->resetTimer();
@@ -147,56 +140,53 @@ void ActionMapper::handleMode1Hold(const GestureEvent &event) {
 
 void ActionMapper::handleMode1Combo(uint8_t mask) {
     switch (mask) {
-        case (uint8_t)(FingerMask::INDEX | FingerMask::MIDDLE): // Ctrl+C
+        case (uint8_t)(FingerMask::INDEX | FingerMask::MIDDLE):
             ble->pressKey(KEY_LEFT_CTRL);
             ble->tapKey('c');
             ble->releaseKey(KEY_LEFT_CTRL);
             break;
 
-        case (uint8_t)(FingerMask::INDEX | FingerMask::RING): // Ctrl+V
+        case (uint8_t)(FingerMask::INDEX | FingerMask::RING):
             ble->pressKey(KEY_LEFT_CTRL);
             ble->tapKey('v');
             ble->releaseKey(KEY_LEFT_CTRL);
             break;
 
-        case (uint8_t)(FingerMask::MIDDLE | FingerMask::RING): // Ctrl+Scroll Up (Zoom In)
+        case (uint8_t)(FingerMask::MIDDLE | FingerMask::RING):
             ble->pressKey(KEY_LEFT_CTRL);
             ble->mouseScroll(1);
             ble->releaseKey(KEY_LEFT_CTRL);
             break;
 
-        case (uint8_t)(FingerMask::MIDDLE | FingerMask::PINKY): // Ctrl+Scroll Down (Zoom Out)
+        case (uint8_t)(FingerMask::MIDDLE | FingerMask::PINKY):
             ble->pressKey(KEY_LEFT_CTRL);
             ble->mouseScroll(-1);
             ble->releaseKey(KEY_LEFT_CTRL);
             break;
 
-        case (uint8_t)(FingerMask::INDEX | FingerMask::MIDDLE | FingerMask::RING): // Win+Tab
+        case (uint8_t)(FingerMask::INDEX | FingerMask::MIDDLE | FingerMask::RING):
             ble->pressKey(KEY_LEFT_GUI);
             ble->tapKey(KEY_TAB);
             ble->releaseKey(KEY_LEFT_GUI);
             break;
 
-        case (uint8_t)(FingerMask::INDEX | FingerMask::MIDDLE | FingerMask::PINKY): // Win+D
+        case (uint8_t)(FingerMask::INDEX | FingerMask::MIDDLE | FingerMask::PINKY):
             ble->pressKey(KEY_LEFT_GUI);
             ble->tapKey('d');
             ble->releaseKey(KEY_LEFT_GUI);
             break;
 
-        case FingerMask::ALL: // Win+L
+        case FingerMask::ALL:
             ble->pressKey(KEY_LEFT_GUI);
             ble->tapKey('l');
             ble->releaseKey(KEY_LEFT_GUI);
             break;
 
         default:
-            break; // Kombinasi tidak terdefinisi pada Mode 1, diabaikan.
+            break;
     }
 }
 
-// ============================================================================
-// MODE 2 - MEDIA & PRODUKTIVITAS (sensor gerak MPU9250 nonaktif sepenuhnya)
-// ============================================================================
 void ActionMapper::handleMode2(const GestureEvent &event) {
     switch (event.type) {
         case GestureType::SINGLE_TAP:   handleMode2SingleTap(event.fingerMask); break;
@@ -221,18 +211,18 @@ void ActionMapper::handleMode2SingleTap(uint8_t mask) {
 void ActionMapper::handleMode2DoubleTap(uint8_t mask) {
     switch (mask) {
         case FingerMask::INDEX:
-            ble->tapKey(KEY_F11); // Full Screen
+            ble->tapKey(KEY_F11);
             break;
 
         case FingerMask::MIDDLE:
-            // Win+D - Show Desktop
+
             ble->pressKey(KEY_LEFT_GUI);
             ble->tapKey('d');
             ble->releaseKey(KEY_LEFT_GUI);
             break;
 
         case FingerMask::RING:
-            // Next Virtual Desktop: Ctrl+Win+Right Arrow
+
             ble->pressKey(KEY_LEFT_CTRL);
             ble->pressKey(KEY_LEFT_GUI);
             ble->tapKey(KEY_RIGHT_ARROW);
@@ -241,7 +231,7 @@ void ActionMapper::handleMode2DoubleTap(uint8_t mask) {
             break;
 
         case FingerMask::PINKY:
-            // Previous Virtual Desktop: Ctrl+Win+Left Arrow
+
             ble->pressKey(KEY_LEFT_CTRL);
             ble->pressKey(KEY_LEFT_GUI);
             ble->tapKey(KEY_LEFT_ARROW);
@@ -256,24 +246,22 @@ void ActionMapper::handleMode2DoubleTap(uint8_t mask) {
 void ActionMapper::handleMode2Hold(const GestureEvent &event) {
     switch (event.fingerMask) {
         case FingerMask::INDEX:
-            // Fast Forward: kirim Right Arrow berulang (HOLD_TRIGGERED lalu
-            // setiap HOLD_REPEAT) - kompatibel dengan skip-seek di YouTube,
-            // VLC, dan sebagian besar pemutar video/musik populer.
+
             ble->tapKey(KEY_RIGHT_ARROW);
             break;
 
         case FingerMask::MIDDLE:
-            // Rewind
+
             ble->tapKey(KEY_LEFT_ARROW);
             break;
 
         case FingerMask::RING:
-            // TOGGLE KEMBALI KE MODE 1 (hanya sekali saat threshold tercapai)
+
             if (event.type == GestureType::HOLD_TRIGGERED) toggleMode();
             break;
 
         case FingerMask::PINKY:
-            // Win+Tab - Task View
+
             if (event.type == GestureType::HOLD_TRIGGERED) {
                 ble->pressKey(KEY_LEFT_GUI);
                 ble->tapKey(KEY_TAB);
@@ -287,21 +275,21 @@ void ActionMapper::handleMode2Hold(const GestureEvent &event) {
 
 void ActionMapper::handleMode2Combo(uint8_t mask) {
     switch (mask) {
-        case (uint8_t)(FingerMask::INDEX | FingerMask::MIDDLE): // Volume Up
+        case (uint8_t)(FingerMask::INDEX | FingerMask::MIDDLE):
             ble->mediaVolumeUp();
             break;
 
-        case (uint8_t)(FingerMask::INDEX | FingerMask::RING): // Volume Down
+        case (uint8_t)(FingerMask::INDEX | FingerMask::RING):
             ble->mediaVolumeDown();
             break;
 
-        case (uint8_t)(FingerMask::MIDDLE | FingerMask::PINKY): // Close Window (Alt+F4)
+        case (uint8_t)(FingerMask::MIDDLE | FingerMask::PINKY):
             ble->pressKey(KEY_LEFT_ALT);
             ble->tapKey(KEY_F4);
             ble->releaseKey(KEY_LEFT_ALT);
             break;
 
         default:
-            break; // Kombinasi tidak terdefinisi pada Mode 2, diabaikan.
+            break;
     }
 }

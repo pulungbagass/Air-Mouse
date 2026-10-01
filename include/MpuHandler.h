@@ -1,66 +1,75 @@
-/**
- * MpuHandler.h
- * ----------------------------------------------------------------------
- * Modul KHUSUS untuk komunikasi I2C dengan sensor 9-axis MPU9250.
- * Tanggung jawab modul ini HANYA:
- *   1. Inisialisasi & kalibrasi bias gyro (termasuk re-center non-blocking).
- *   2. Membaca gyro secara berkala dan mengubahnya menjadi delta pergerakan
- *      kursor (dx, dy) yang siap dikirim ke BleHandler.
- *
- * Modul ini TIDAK mengetahui apa pun soal BLE, tombol, atau mode aplikasi -
- * itu adalah tanggung jawab ActionMapper / main.cpp.
- * ----------------------------------------------------------------------
- */
 #pragma once
 #include <Arduino.h>
-#include <Wire.h>
-#include "MPU9250.h"
+#include "I2cBus.h"
+#include "Mpu9250Driver.h"
+#include "MotionEngine.h"
 
-// Hasil satu kali pembacaan MpuHandler::update().
 struct MouseDelta {
     int16_t dx = 0;
     int16_t dy = 0;
 };
 
+enum class MpuState : uint8_t {
+    SEARCHING = 0,
+    CALIBRATING,
+    RUNNING
+};
+
 class MpuHandler {
 public:
-    // Inisialisasi I2C, sensor, dan kalibrasi bias awal (dipanggil di setup()).
+    MpuHandler();
+
     void begin();
+    bool update(MouseDelta &out, bool motionFrozen);
 
-    // Dipanggil setiap iterasi loop(). Mengembalikan true jika ada sampel gyro
-    // baru yang berhasil diproses (delta bisa saja (0,0) jika di bawah deadzone
-    // atau sedang dalam proses re-center).
-    bool update(MouseDelta &out);
-
-    // Memicu proses re-kalibrasi titik nol (bias gyro) secara NON-BLOCKING.
-    // Selama proses ini berjalan (RECENTER_DURATION_MS), delta pergerakan
-    // kursor akan bernilai (0,0).
     void startRecenter();
     bool isRecentering() const;
-
-    // Reset referensi waktu delta-t internal. Wajib dipanggil setiap kali
-    // pembacaan sensor sempat "dijeda" dalam waktu lama (mis. setelah keluar
-    // dari Mode 2, atau setelah fitur pause/sleep sensor dinonaktifkan) agar
-    // tidak terjadi lonjakan delta akibat dt yang membesar.
     void resetTimer();
+    bool isReady() const { return state_ == MpuState::RUNNING; }
+    MpuState state() const { return state_; }
 
-    bool isReady() const { return ready; }
+    void forceReinit();
+    void runI2cScan();
+    void printStatus();
+    void printTelemetry();
 
 private:
-    MPU9250 mpu;
-    bool ready = false;
-    unsigned long lastSampleTime = 0;
+    I2cBus bus_;
+    Mpu9250Driver imu_;
+    MotionEngine engine_;
+    CalibrationAccumulator calib_;
+    MpuState state_ = MpuState::SEARCHING;
 
-    // Bias gyro (derajat/detik) hasil kalibrasi, dikurangkan dari tiap sampel.
-    float gyroBiasX = 0.0f;
-    float gyroBiasY = 0.0f;
+    uint16_t attempt_ = 0;
+    uint16_t recoveries_ = 0;
+    uint32_t nextAttemptMs_ = 0;
+    uint32_t clockHz_ = 0;
 
-    // State proses re-center non-blocking.
-    bool          recentering      = false;
-    unsigned long recenterStartTime = 0;
-    float         recenterSumX     = 0.0f;
-    float         recenterSumY     = 0.0f;
-    uint16_t      recenterSamples  = 0;
+    uint8_t failCount_ = 0;
+    uint16_t staleCount_ = 0;
+    int16_t lastRaw_[6] = {0, 0, 0, 0, 0, 0};
 
-    void finishRecenter();
+    bool resync_ = true;
+    uint32_t lastMicros_ = 0;
+    uint32_t lastReportMs_ = 0;
+    ImuSample lastSample_;
+
+    bool calibBoot_ = true;
+    uint32_t calibStartMs_ = 0;
+    uint8_t calibAttempts_ = 0;
+    float bestSigma_ = 1e6f;
+    Vec3f bestBias_ = {0.0f, 0.0f, 0.0f};
+    Vec3f bestAccel_ = {0.0f, 0.0f, 1.0f};
+
+    void attemptInit();
+    bool tryInitialize();
+    bool raiseClock();
+    void beginCalibration(bool boot);
+    void runCalibration(uint32_t nowMs);
+    void finishCalibrationWindow();
+    void acceptCalibration(const Vec3f &bias, const Vec3f &accel);
+    bool runMotion(MouseDelta &out, bool frozen, uint32_t nowMs);
+    bool readSample(ImuSample &sample);
+    void beginRecovery(const char *reason);
+    const char *stateName() const;
 };

@@ -1,17 +1,22 @@
 #include "DebugConsole.h"
+#include "Config.h"
 
-void DebugConsole::begin(ActionMapper *am, BleHandler *bleRef) {
+void DebugConsole::begin(ActionMapper *am, BleHandler *bleRef, MpuHandler *mpuRef) {
     actionMapper = am;
     ble          = bleRef;
+    mpu          = mpuRef;
     printHelp();
 }
 
 void DebugConsole::update() {
-    // Proses semua karakter yang SUDAH tersedia di buffer, lalu langsung
-    // kembali - tidak pernah menunggu (Serial.available() bersifat non-blocking).
+    if (telemetryOn && mpu && (millis() - lastTelemetry) >= TELEMETRY_INTERVAL_MS) {
+        lastTelemetry = millis();
+        mpu->printTelemetry();
+    }
+
     while (Serial.available() > 0) {
         char c = (char)Serial.read();
-        if (c == '\r' || c == '\n') continue; // abaikan enter/newline
+        if (c == '\r' || c == '\n') continue;
         handleChar(c);
     }
 }
@@ -22,12 +27,12 @@ void DebugConsole::emit(GestureType type, uint8_t mask) {
     evt.type       = type;
     evt.fingerMask = mask;
     evt.timestamp  = millis();
-    actionMapper->handleGesture(evt); // menempuh jalur yang PERSIS sama dengan sentuhan asli
+    actionMapper->handleGesture(evt);
 }
 
 void DebugConsole::handleChar(char c) {
     switch (c) {
-        // ----------------- Single Tap -----------------
+
         case '1': Serial.println(F("[TEST] SINGLE_TAP   Telunjuk"));
                   emit(GestureType::SINGLE_TAP, FingerMask::INDEX); break;
         case '2': Serial.println(F("[TEST] SINGLE_TAP   Tengah"));
@@ -37,7 +42,6 @@ void DebugConsole::handleChar(char c) {
         case '4': Serial.println(F("[TEST] SINGLE_TAP   Kelingking"));
                   emit(GestureType::SINGLE_TAP, FingerMask::PINKY); break;
 
-        // ----------------- Double Tap -----------------
         case 'q': Serial.println(F("[TEST] DOUBLE_TAP   Telunjuk"));
                   emit(GestureType::DOUBLE_TAP, FingerMask::INDEX); break;
         case 'w': Serial.println(F("[TEST] DOUBLE_TAP   Tengah"));
@@ -47,7 +51,6 @@ void DebugConsole::handleChar(char c) {
         case 'r': Serial.println(F("[TEST] DOUBLE_TAP   Kelingking"));
                   emit(GestureType::DOUBLE_TAP, FingerMask::PINKY); break;
 
-        // ----------------- Hold (>=3 detik, ditembakkan sekali) -----------------
         case 'a': Serial.println(F("[TEST] HOLD         Telunjuk (drag lock)"));
                   emit(GestureType::HOLD_TRIGGERED, FingerMask::INDEX); break;
         case 's': Serial.println(F("[TEST] HOLD         Tengah (re-center)"));
@@ -57,7 +60,6 @@ void DebugConsole::handleChar(char c) {
         case 'f': Serial.println(F("[TEST] HOLD         Kelingking (pause sensor / Win+Tab)"));
                   emit(GestureType::HOLD_TRIGGERED, FingerMask::PINKY); break;
 
-        // ----------------- Combo (2/3/4 jari) -----------------
         case 'z': Serial.println(F("[TEST] COMBO        Telunjuk+Tengah"));
                   emit(GestureType::COMBO_TAP, (uint8_t)(FingerMask::INDEX | FingerMask::MIDDLE)); break;
         case 'x': Serial.println(F("[TEST] COMBO        Telunjuk+Manis"));
@@ -73,19 +75,28 @@ void DebugConsole::handleChar(char c) {
         case 'm': Serial.println(F("[TEST] COMBO        4 Jari (ALL)"));
                   emit(GestureType::COMBO_TAP, FingerMask::ALL); break;
 
-        // ----------------- Gerak mouse manual (bypass MPU9250 sepenuhnya) -----------------
         case 'i': if (ble) ble->moveMouse(0, -10); Serial.println(F("[TEST] Mouse bergerak ke ATAS"));   break;
         case 'k': if (ble) ble->moveMouse(0,  10); Serial.println(F("[TEST] Mouse bergerak ke BAWAH"));  break;
         case 'j': if (ble) ble->moveMouse(-10, 0); Serial.println(F("[TEST] Mouse bergerak ke KIRI"));   break;
         case 'l': if (ble) ble->moveMouse( 10, 0); Serial.println(F("[TEST] Mouse bergerak ke KANAN"));  break;
 
-        // ----------------- Util -----------------
         case 'p':
             Serial.print(F("[TEST] Status BLE: "));
             Serial.println((ble && ble->isConnected()) ? F("CONNECTED") : F("belum terhubung"));
             Serial.print(F("[TEST] Mode saat ini: "));
             Serial.println(actionMapper && actionMapper->getMode() == OperationMode::MODE_1_NAVIGATION ? "1" : "2");
             break;
+
+        case 'g':
+            telemetryOn = !telemetryOn;
+            Serial.println(telemetryOn ? F("[TEST] Telemetri IMU ON") : F("[TEST] Telemetri IMU OFF"));
+            break;
+
+        case 'u': if (mpu) mpu->runI2cScan(); break;
+        case 't': if (mpu) mpu->forceReinit(); break;
+        case 'y': if (mpu) mpu->startRecenter(); break;
+        case 'o': if (mpu) mpu->printStatus(); break;
+        case 'B': if (ble) ble->clearBonds(); break;
 
         case 'h':
         case '?':
@@ -102,7 +113,7 @@ void DebugConsole::handleChar(char c) {
 
 void DebugConsole::printHelp() {
     Serial.println(F("========================================================"));
-    Serial.println(F(" MODE TEST SERIAL - Air Mouse (tanpa MPU9250 / sensor)"));
+    Serial.println(F(" MODE TEST SERIAL - Air Mouse"));
     Serial.println(F(" Ketik satu karakter di Serial Monitor lalu tekan Enter:"));
     Serial.println(F("--------------------------------------------------------"));
     Serial.println(F(" 1/2/3/4  Single Tap   Telunjuk/Tengah/Manis/Kelingking"));
@@ -117,6 +128,9 @@ void DebugConsole::printHelp() {
     Serial.println(F(" m  Combo 4 jari (ALL)           -> Win+L"));
     Serial.println(F(" i/k/j/l  Gerak mouse manual: atas/bawah/kiri/kanan"));
     Serial.println(F(" p  Cek status koneksi BLE & mode aktif"));
+    Serial.println(F(" g  Toggle telemetri IMU (gyro/accel/gravitasi/laju kursor)"));
+    Serial.println(F(" u  Scan I2C   |  t  Re-init MPU   |  y  Re-center   |  o  Status MPU"));
+    Serial.println(F(" B  Hapus semua bond BLE"));
     Serial.println(F(" h atau ?  Tampilkan menu ini lagi"));
     Serial.println(F("========================================================"));
 }
